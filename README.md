@@ -45,14 +45,27 @@ A Flask-based web application that allows users to query data using natural lang
    ```
 
 4. **Set up environment variables**
+   
+   **Option A: Create a `.env` file**
    Create a `.env` file in the root directory:
    ```bash
+   # OpenAI API Configuration
+   OPENAI_API_KEY=your-openai-api-key-here
+   
    # Flask Configuration
    SECRET_KEY=your-secret-key-here
-   
-   # OpenAI API Configuration (for Phase 2)
-   OPENAI_API_KEY=your-openai-api-key-here
    ```
+   
+   **Option B: Set environment variables directly**
+   ```bash
+   export OPENAI_API_KEY='your-openai-api-key-here'
+   export SECRET_KEY='your-secret-key-here'
+   ```
+   
+   **Get your OpenAI API key:**
+   - Visit https://platform.openai.com/account/api-keys
+   - Create a new API key
+   - Copy the key and replace `your-openai-api-key-here` above
 
 5. **Run the application**
    ```bash

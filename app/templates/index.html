@@ -80,7 +80,7 @@
             </div>
         </div>
 
-        <!-- Chat Section (Placeholder for Phase 2) -->
+        <!-- Chat Section -->
         <div class="row mt-4">
             <div class="col-12">
                 <div class="card">
@@ -88,10 +88,26 @@
                         <h5><i class="fas fa-comments me-2"></i>Natural Language Query</h5>
                     </div>
                     <div class="card-body">
-                        <div class="text-center text-muted">
-                            <i class="fas fa-robot fa-3x mb-3"></i>
-                            <p>Chat functionality coming in Phase 2!</p>
-                            <p>Upload your data first to start querying with natural language.</p>
+                        <div id="chatContainer">
+                            <div id="chatMessages" class="chat-messages">
+                                <div class="chat-message system">
+                                    <div class="message-content">
+                                        <i class="fas fa-robot me-2"></i>
+                                        Hello! I'm your AI data analyst. Ask me questions about your data in natural language. 
+                                        Try queries like "Show me patients over 70 years old" or "How many patients died during the study?"
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="chat-input-container">
+                                <form id="queryForm" class="d-flex">
+                                    <input type="text" id="queryInput" class="form-control me-2" 
+                                           placeholder="Ask a question about your data..." required>
+                                    <button type="submit" class="btn btn-primary">
+                                        <i class="fas fa-paper-plane"></i>
+                                    </button>
+                                </form>
+                            </div>
                         </div>
                     </div>
                 </div>

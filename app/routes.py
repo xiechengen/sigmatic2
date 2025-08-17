@@ -1,9 +1,11 @@
 from flask import Blueprint, render_template, request, jsonify, session, flash, redirect, url_for
 from app.utils.data_processor import DataProcessor
+from app.utils.query_processor import QueryProcessor
 import os
 
 main = Blueprint('main', __name__)
 data_processor = DataProcessor()
+query_processor = QueryProcessor()
 
 @main.route('/')
 def index():
@@ -82,4 +84,22 @@ def remove_file(filename):
                 session.modified = True
                 return jsonify({'success': True, 'message': f'File {filename} removed'})
     
-    return jsonify({'success': False, 'error': 'File not found'}) 
+    return jsonify({'success': False, 'error': 'File not found'})
+
+@main.route('/query', methods=['POST'])
+def process_query():
+    """Process natural language query"""
+    data = request.get_json()
+    
+    if not data or 'query' not in data:
+        return jsonify({'success': False, 'error': 'No query provided'})
+    
+    query = data['query'].strip()
+    
+    if not query:
+        return jsonify({'success': False, 'error': 'Query cannot be empty'})
+    
+    # Process the query
+    result = query_processor.process_query(query, session)
+    
+    return jsonify(result) 

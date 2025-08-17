@@ -7,6 +7,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // Event listeners
     document.getElementById('uploadForm').addEventListener('submit', handleFileUpload);
     document.getElementById('clearSession').addEventListener('click', clearSession);
+    document.getElementById('queryForm').addEventListener('submit', handleQuery);
     
     // File input change event
     document.getElementById('fileInput').addEventListener('change', function() {
@@ -271,4 +272,212 @@ function showLoading(show) {
     } else {
         modal.hide();
     }
+}
+
+// Handle natural language query
+async function handleQuery(event) {
+    event.preventDefault();
+    
+    const queryInput = document.getElementById('queryInput');
+    const query = queryInput.value.trim();
+    
+    if (!query) {
+        return;
+    }
+    
+    // Add user message to chat
+    addChatMessage('user', query);
+    queryInput.value = '';
+    
+    // Add loading message
+    const loadingId = addChatMessage('assistant', 'Analyzing your query<span class="loading-dots"></span>', true);
+    
+    try {
+        const response = await fetch('/query', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ query: query })
+        });
+        
+        const result = await response.json();
+        
+        // Remove loading message
+        removeChatMessage(loadingId);
+        
+        if (result.success) {
+            // Add assistant response
+            addQueryResponse(result);
+        } else {
+            addChatMessage('assistant', `❌ Error: ${result.error}`);
+        }
+    } catch (error) {
+        console.error('Query error:', error);
+        removeChatMessage(loadingId);
+        addChatMessage('assistant', '❌ An error occurred while processing your query. Please try again.');
+    }
+}
+
+// Add chat message
+function addChatMessage(type, content, isTemporary = false) {
+    const chatMessages = document.getElementById('chatMessages');
+    const messageDiv = document.createElement('div');
+    const messageId = isTemporary ? 'temp-' + Date.now() : null;
+    
+    if (messageId) {
+        messageDiv.id = messageId;
+    }
+    
+    messageDiv.className = `chat-message ${type}`;
+    messageDiv.innerHTML = `<div class="message-content">${content}</div>`;
+    
+    chatMessages.appendChild(messageDiv);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+    
+    return messageId;
+}
+
+// Remove chat message (for loading states)
+function removeChatMessage(messageId) {
+    const message = document.getElementById(messageId);
+    if (message) {
+        message.remove();
+    }
+}
+
+// Add query response with results
+function addQueryResponse(result) {
+    const chatMessages = document.getElementById('chatMessages');
+    const responseDiv = document.createElement('div');
+    responseDiv.className = 'chat-message assistant';
+    
+    let content = '';
+    
+    // Add report
+    if (result.report) {
+        content += `
+            <div class="query-report">
+                <h6><i class="fas fa-chart-bar me-2"></i>Analysis Report</h6>
+                <p>${result.report}</p>
+            </div>
+        `;
+    }
+    
+    // Add results based on type
+    if (result.result) {
+        if (result.result.type === 'dataframe') {
+            content += `
+                <div class="query-result">
+                    <div class="query-result-header">
+                        <i class="fas fa-table me-2"></i>Results (${result.result.total_rows} rows)
+                    </div>
+                    <div class="query-result-content">
+                        ${createDataTable(result.result.data, result.result.columns)}
+                    </div>
+                </div>
+            `;
+        } else if (result.result.type === 'scalar') {
+            content += `
+                <div class="query-result">
+                    <div class="query-result-header">
+                        <i class="fas fa-calculator me-2"></i>Result
+                    </div>
+                    <div class="query-result-content">
+                        <h4 class="text-primary">${result.result.value}</h4>
+                    </div>
+                </div>
+            `;
+        } else if (result.result.type === 'series') {
+            content += `
+                <div class="query-result">
+                    <div class="query-result-header">
+                        <i class="fas fa-list me-2"></i>Results
+                    </div>
+                    <div class="query-result-content">
+                        ${createSeriesDisplay(result.result.data)}
+                    </div>
+                </div>
+            `;
+        }
+    }
+    
+    // Add pandas code (collapsible)
+    if (result.pandas_code) {
+        content += `
+            <details class="query-code">
+                <summary class="query-code-header">
+                    <i class="fas fa-code me-2"></i>Generated Pandas Code
+                </summary>
+                <pre><code>${escapeHtml(result.pandas_code)}</code></pre>
+            </details>
+        `;
+    }
+    
+    responseDiv.innerHTML = `<div class="message-content">${content}</div>`;
+    chatMessages.appendChild(responseDiv);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+}
+
+// Create data table for results
+function createDataTable(data, columns) {
+    if (!data || data.length === 0) {
+        return '<p class="text-muted">No data to display</p>';
+    }
+    
+    let tableHTML = `
+        <div class="table-responsive">
+            <table class="table table-sm table-hover">
+                <thead>
+                    <tr>
+                        ${columns.map(col => `<th>${escapeHtml(col)}</th>`).join('')}
+                    </tr>
+                </thead>
+                <tbody>
+    `;
+    
+    data.forEach(row => {
+        tableHTML += '<tr>';
+        columns.forEach(col => {
+            const value = row[col] !== null && row[col] !== undefined ? row[col] : '';
+            tableHTML += `<td>${escapeHtml(String(value))}</td>`;
+        });
+        tableHTML += '</tr>';
+    });
+    
+    tableHTML += `
+                </tbody>
+            </table>
+        </div>
+    `;
+    
+    return tableHTML;
+}
+
+// Create series display
+function createSeriesDisplay(data) {
+    let html = '<div class="row">';
+    
+    Object.entries(data).forEach(([key, value]) => {
+        html += `
+            <div class="col-md-6 mb-2">
+                <div class="card">
+                    <div class="card-body p-2">
+                        <small class="text-muted">${escapeHtml(key)}</small>
+                        <div class="fw-bold">${escapeHtml(String(value))}</div>
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+    
+    html += '</div>';
+    return html;
+}
+
+// Escape HTML to prevent XSS
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
 } 
