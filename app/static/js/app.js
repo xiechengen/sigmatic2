@@ -689,6 +689,9 @@ function addVisualizationResponse(result) {
     const responseDiv = document.createElement('div');
     responseDiv.className = 'chat-message assistant';
 
+    // Generate unique chart ID
+    const chartId = 'chart-' + Math.random().toString(36).substr(2, 9);
+
     let content = '';
 
     // Add chart type and title
@@ -711,7 +714,7 @@ function addVisualizationResponse(result) {
                 </div>
             </div>
             <div class="chart-content">
-                <div id="temp-chart-${Date.now()}"></div>
+                <div id="${chartId}"></div>
             </div>
     `;
 
@@ -727,9 +730,11 @@ function addVisualizationResponse(result) {
     chatMessages.scrollTop = chatMessages.scrollHeight;
 
     // Render the chart
-    const chartDiv = document.getElementById(`temp-chart-${Date.now()}`);
+    const chartDiv = document.getElementById(chartId);
     if (chartDiv && result.chart && result.chart.data) {
-        Plotly.newPlot(chartDiv, result.chart.data.data, result.chart.layout);
+        // The chart.data is already the full Plotly figure JSON
+        const plotlyData = result.chart.data;
+        Plotly.newPlot(chartDiv, plotlyData.data, plotlyData.layout);
     }
 }
 
