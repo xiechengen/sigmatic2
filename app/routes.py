@@ -136,6 +136,9 @@ def get_dashboard():
     if 'dashboard_charts' not in session:
         session['dashboard_charts'] = []
     
+    print(f"Dashboard requested. Total charts in session: {len(session['dashboard_charts'])}")
+    print(f"Dashboard charts: {session['dashboard_charts']}")
+    
     return jsonify({
         'success': True,
         'charts': session['dashboard_charts']
@@ -161,6 +164,12 @@ def pin_chart_to_dashboard():
     }
     
     session['dashboard_charts'].append(chart_info)
+    
+    # Mark session as modified
+    session.modified = True
+    
+    print(f"Pinned chart to dashboard. Total charts: {len(session['dashboard_charts'])}")
+    print(f"Chart info: {chart_info}")
     
     return jsonify({
         'success': True,
@@ -194,7 +203,25 @@ def remove_chart_from_dashboard(chart_id):
         if chart['id'] != chart_id
     ]
     
+    # Mark session as modified
+    session.modified = True
+    
     return jsonify({
         'success': True,
         'message': 'Chart removed from dashboard'
+    })
+
+@main.route('/test-session', methods=['GET'])
+def test_session():
+    """Test session functionality"""
+    if 'test_counter' not in session:
+        session['test_counter'] = 0
+    
+    session['test_counter'] += 1
+    session.modified = True
+    
+    return jsonify({
+        'success': True,
+        'test_counter': session['test_counter'],
+        'dashboard_charts_count': len(session.get('dashboard_charts', []))
     }) 

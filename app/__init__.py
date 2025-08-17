@@ -9,6 +9,9 @@ def create_app(config_class=Config):
     # Ensure upload directory exists
     os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
     
+    # Ensure exports/charts directory exists
+    os.makedirs('exports/charts', exist_ok=True)
+    
     # Register blueprints
     from app.routes import main
     app.register_blueprint(main)

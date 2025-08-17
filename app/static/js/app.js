@@ -485,11 +485,15 @@ async function clearDashboard() {
 
 async function loadDashboard() {
     try {
+        console.log('Loading dashboard...');
         const response = await fetch('/dashboard');
         const result = await response.json();
+        console.log('Dashboard response:', result);
         
-        if (result.success && result.charts.length > 0) {
-            displayDashboardCharts(result.charts);
+        if (result.success) {
+            displayDashboardCharts(result.charts || []);
+        } else {
+            console.error('Dashboard load failed:', result.error);
         }
     } catch (error) {
         console.error('Error loading dashboard:', error);
@@ -497,9 +501,16 @@ async function loadDashboard() {
 }
 
 function displayDashboardCharts(charts) {
+    console.log('Displaying dashboard charts:', charts);
     const dashboardCharts = document.getElementById('dashboardCharts');
     
+    if (!dashboardCharts) {
+        console.error('Dashboard charts container not found!');
+        return;
+    }
+    
     if (charts.length === 0) {
+        console.log('No charts to display');
         dashboardCharts.innerHTML = `
             <div class="text-center text-muted py-4">
                 <i class="fas fa-chart-bar fa-3x mb-3"></i>
@@ -514,22 +525,35 @@ function displayDashboardCharts(charts) {
     
     // Render charts
     charts.forEach(chart => {
-        if (chart.chart && chart.chart.data) {
-            const chartDiv = document.getElementById(`chart-${chart.id}`);
-            if (chartDiv) {
+        console.log('Rendering chart:', chart);
+        const chartDiv = document.getElementById(`chart-${chart.id}`);
+        console.log('Chart div found:', chartDiv);
+        if (chartDiv && chart.chart) {
+            if (chart.chart.chart_type === 'png' && chart.chart.image_path) {
+                // Display PNG image
+                const filename = chart.chart.image_path;
+                console.log('Displaying PNG in dashboard:', filename);
+                chartDiv.innerHTML = `<img src="/chart-image/${filename}" alt="Chart" style="max-width: 100%; height: auto;" />`;
+            } else if (chart.chart.data) {
+                // Display Plotly chart
+                console.log('Displaying Plotly in dashboard');
                 Plotly.newPlot(chartDiv, chart.chart.data.data, chart.chart.layout);
             }
+        } else {
+            console.log('Chart div or chart data not found for chart:', chart.id);
         }
     });
 }
 
 function createChartHTML(chart) {
+    console.log('Creating HTML for chart:', chart);
+    const chartType = chart.chart.chart_type || chart.chart.type || 'chart';
     return `
         <div class="chart-container">
             <div class="chart-header">
                 <h6 class="chart-title">${escapeHtml(chart.title)}</h6>
                 <div class="chart-actions">
-                    <span class="chart-type-badge">${chart.chart.type || 'chart'}</span>
+                    <span class="chart-type-badge">${chartType}</span>
                     <button class="btn btn-outline-danger btn-sm" onclick="removeChartFromDashboard('${chart.id}')">
                         <i class="fas fa-trash"></i>
                     </button>
@@ -557,8 +581,14 @@ async function removeChartFromDashboard(chartId) {
     }
 }
 
-async function pinChartToDashboard(chartData, title) {
+async function pinChartToDashboard(chartData, title, buttonElement) {
     try {
+        console.log('Pinning chart:', { chartData, title });
+        console.log('Request body:', JSON.stringify({
+            chart: chartData,
+            title: title
+        }));
+        
         const response = await fetch('/dashboard/pin', {
             method: 'POST',
             headers: {
@@ -570,22 +600,29 @@ async function pinChartToDashboard(chartData, title) {
             })
         });
         
+        console.log('Response status:', response.status);
         const result = await response.json();
+        console.log('Pin response:', result);
         
         if (result.success) {
             // Update the pin button to show it's pinned
-            const pinBtn = document.querySelector('.pin-chart-btn[data-chart-id]');
-            if (pinBtn) {
-                pinBtn.classList.add('pinned');
-                pinBtn.innerHTML = '<i class="fas fa-thumbtack"></i> Pinned';
-                pinBtn.disabled = true;
+            if (buttonElement) {
+                buttonElement.classList.add('pinned');
+                buttonElement.innerHTML = '<i class="fas fa-thumbtack"></i> Pinned';
+                buttonElement.disabled = true;
             }
+            
+            // Show success message
+            showAlert('Chart pinned to dashboard successfully!', 'success');
             
             // Reload dashboard
             loadDashboard();
+        } else {
+            showAlert('Failed to pin chart: ' + (result.error || 'Unknown error'), 'danger');
         }
     } catch (error) {
         console.error('Error pinning chart:', error);
+        showAlert('Error pinning chart to dashboard', 'danger');
     }
 }
 
@@ -696,7 +733,7 @@ function addChartResponse(result) {
                     <span class="chart-type-badge">${chartType}</span>
                 </div>
                 <div class="visualization-actions">
-                    <button class="btn btn-sm pin-chart-btn" onclick="pinChartToDashboard(${JSON.stringify(result.result.chart)}, '${escapeHtml(chartTitle)}')">
+                    <button class="btn btn-sm pin-chart-btn" data-chart-id="${chartId}" data-chart-data='${JSON.stringify(result.result.chart)}' data-chart-title="${escapeHtml(chartTitle)}">
                         <i class="fas fa-thumbtack"></i> Pin to Dashboard
                     </button>
                 </div>
@@ -733,6 +770,20 @@ function addChartResponse(result) {
         }
     } else {
         console.log('Chart div or chart data not found');
+    }
+    
+    // Add event listener for pin button
+    const pinBtn = document.querySelector(`[data-chart-id="${chartId}"]`);
+    if (pinBtn) {
+        console.log('Found pin button, adding event listener');
+        pinBtn.addEventListener('click', function() {
+            console.log('Pin button clicked!');
+            const chartData = JSON.parse(this.getAttribute('data-chart-data'));
+            const title = this.getAttribute('data-chart-title');
+            pinChartToDashboard(chartData, title, this);
+        });
+    } else {
+        console.log('Pin button not found for chart ID:', chartId);
     }
 }
 
