@@ -10,15 +10,19 @@ A Flask-based web application that allows users to query data using natural lang
 - **Session Management**: Temporary storage with automatic cleanup
 - **Responsive UI**: Modern, mobile-friendly interface
 
-### Phase 2 (Coming Soon) - Natural Language Query Processing
+### Phase 2 (Current) - Natural Language Query Processing ✅
 - Natural language query interpretation using OpenAI API
 - Text-based report generation
 - Query-to-pandas transformation
+- Interactive chat interface
 
-### Phase 3 (Coming Soon) - Visualization & Dashboard
+### Phase 3 (Current) - Visualization & Dashboard ✅
 - Dynamic chart generation using Plotly
 - Dashboard with pinned visualizations
 - Interactive plot customization
+- Multiple chart types (scatter, line, bar, histogram, box, pie, heatmap)
+- Automatic chart type detection from natural language
+- Data summary statistics with visualizations
 
 ### Phase 4 (Coming Soon) - Interactive Refinement
 - Query refinement system
@@ -93,6 +97,24 @@ A Flask-based web application that allows users to query data using natural lang
 - View uploaded data in a responsive table format
 - See column names and data types
 - Preview first 10 rows of each dataset
+
+### Natural Language Queries
+- Ask questions in plain English: "How many patients are there?"
+- Get instant data analysis and reports
+- View results in tables with summary statistics
+
+### Data Visualization
+- Request charts using natural language: "Create a scatter plot of age vs weight"
+- Automatic chart type detection (scatter, line, bar, histogram, box, pie, heatmap)
+- Interactive charts with Plotly
+- Pin charts to dashboard for easy access
+- View data summary statistics with each visualization
+
+### Dashboard Management
+- Pin important charts to your dashboard
+- Remove charts from dashboard
+- Clear all dashboard charts
+- Session-based storage (cleared when browser closes)
 
 ## Project Structure
 

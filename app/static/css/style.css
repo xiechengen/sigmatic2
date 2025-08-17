@@ -313,4 +313,130 @@ body {
     40% { content: '.'; }
     60% { content: '..'; }
     80%, 100% { content: '...'; }
+}
+
+/* Dashboard styles */
+.dashboard-charts {
+    min-height: 200px;
+}
+
+.chart-container {
+    background: white;
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    padding: 15px;
+    margin-bottom: 20px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.chart-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 15px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #eee;
+}
+
+.chart-title {
+    font-weight: 600;
+    color: #333;
+    margin: 0;
+}
+
+.chart-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.chart-actions button {
+    padding: 4px 8px;
+    font-size: 12px;
+}
+
+.chart-content {
+    position: relative;
+    min-height: 300px;
+}
+
+.chart-summary {
+    background: #f8f9fa;
+    border-radius: 6px;
+    padding: 10px;
+    margin-top: 10px;
+    font-size: 14px;
+}
+
+.chart-summary h6 {
+    margin-bottom: 8px;
+    color: #495057;
+}
+
+.chart-summary .summary-item {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 4px;
+}
+
+.chart-summary .summary-label {
+    font-weight: 500;
+    color: #6c757d;
+}
+
+.chart-summary .summary-value {
+    color: #495057;
+}
+
+/* Visualization response styles */
+.visualization-result {
+    background: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    padding: 15px;
+    margin-top: 10px;
+}
+
+.visualization-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 15px;
+}
+
+.visualization-title {
+    font-weight: 600;
+    color: #333;
+    margin: 0;
+}
+
+.visualization-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.pin-chart-btn {
+    background: #28a745;
+    border-color: #28a745;
+    color: white;
+}
+
+.pin-chart-btn:hover {
+    background: #218838;
+    border-color: #1e7e34;
+}
+
+.pin-chart-btn.pinned {
+    background: #6c757d;
+    border-color: #6c757d;
+}
+
+/* Chart type indicator */
+.chart-type-badge {
+    background: #007bff;
+    color: white;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 500;
+    text-transform: uppercase;
 } 

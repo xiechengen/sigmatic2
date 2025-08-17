@@ -93,17 +93,61 @@ class QueryProcessor:
         prompt = f"""
 You are a data analyst working with clinical trial data. Convert the following natural language query into pandas code.
 
-Available datasets:
+IMPORTANT: The dataframes are already loaded in memory. DO NOT use pd.read_csv() or any file reading functions.
+
+Available datasets (already loaded as dataframes):
 {data_context}
 
 Query: "{query}"
 
+WARNING: Only use columns that are listed in the "Available columns" section above. Do NOT assume columns like WEIGHT, HEIGHT, etc. exist unless they are listed.
+
 Generate pandas code that:
-1. Uses the appropriate dataset(s)
-2. Performs the requested analysis
-3. Returns results in a clear format
-4. Handles missing values appropriately
+1. Uses the dataframes that are already loaded (do NOT read files)
+2. Performs the requested analysis using ONLY available columns
+3. Stores the result in a variable called 'result'
+4. Handles missing values appropriately using .dropna() or .fillna()
 5. Uses descriptive variable names
+6. Handles data type conversions properly (use .astype() when needed)
+7. Avoids string concatenation with mixed types
+8. If the query mentions columns that don't exist, use similar available columns or explain the limitation
+9. Handles data quality issues (missing values, placeholder values like "******")
+10. For date operations, use .dropna() to remove invalid dates before processing
+
+Available dataframe variables:
+{', '.join([filename.replace('.csv', '').replace('-', '_').replace(' ', '_') for filename in dataframes.keys()])}
+
+Available columns (after preprocessing):
+{', '.join([f"{filename.replace('.csv', '').replace('-', '_').replace(' ', '_')}: {list(df.columns)}" for filename, df in dataframes.items()])}
+
+Dataframe descriptions:
+{', '.join([f"{filename.replace('.csv', '').replace('-', '_').replace(' ', '_')}: {filename} (demographics data)" if 'dm' in filename.lower() else f"{filename.replace('.csv', '').replace('-', '_').replace(' ', '_')}: {filename} (lab results)" if 'lb' in filename.lower() else f"{filename.replace('.csv', '').replace('-', '_').replace(' ', '_')}: {filename} (other data)" for filename in dataframes.keys()])}
+
+Example: If you need to work with 'dm.csv', use the variable 'dm' (not pd.read_csv('dm.csv'))
+
+IMPORTANT EXAMPLES:
+- For patient demographics (age, sex, etc.): use 'dm' dataframe
+- For lab results: use 'lb' dataframe  
+- To select age column: result = dm[['AGE']]
+- To filter by age: result = dm[dm['AGE'] > 70]
+- To count patients: result = len(dm)
+- To combine information: result = dm[['USUBJID', 'AGE', 'SEX']]
+- NEVER do: dm[['AGE']] = ['AGE'] (this is wrong!)
+- ONLY use columns that exist in the data (check the column list above)
+- For age-related queries, ALWAYS use the 'dm' dataframe, not 'lb'
+
+Common patterns:
+- For counting: result = len(df) or result = df.shape[0]
+- For filtering: result = df[df['column'] > value]
+- For grouping: result = df.groupby('column').size() or result = df.groupby('column').count()
+- For string operations: use .str methods, not + operator
+- For type conversion: df['column'] = df['column'].astype(str) or df['column'] = pd.to_numeric(df['column'], errors='coerce')
+- For selecting columns: use df[['col1', 'col2']] (list of column names)
+- For combining data: use pd.concat() or merge(), not + operator
+- For creating new columns: df['new_col'] = df['col1'].astype(str) + ' ' + df['col2'].astype(str)
+- For date operations: df['date_col'] = pd.to_datetime(df['date_col'], errors='coerce'); df = df.dropna(subset=['date_col'])
+- For date filtering: df[df['date_col'] > '1950-01-01'] (compare with string dates) or df[df['date_col'] > pd.to_datetime('1950-01-01')] (compare with datetime)
+- NEVER use: df[['col1', 'col2']] = ['col1', 'col2'] (this creates a list, not a selection)
 
 Return ONLY the pandas code, no explanations. The code should be ready to execute.
 """
@@ -169,14 +213,148 @@ Return ONLY the pandas code, no explanations. The code should be ready to execut
             'results': {}
         }
         
-        # Add dataframes as individual variables
+        # Add dataframes as individual variables with preprocessing
         for filename, df in dataframes.items():
             var_name = filename.replace('.csv', '').replace('-', '_').replace(' ', '_')
+            
+            # Clean column names (remove spaces, special characters)
+            df.columns = df.columns.str.strip().str.replace(' ', '_').str.replace('-', '_')
+            
+            # Ensure string columns are properly typed
+            for col in df.columns:
+                if df[col].dtype == 'object':
+                    # Handle placeholder values like "******" for missing dates
+                    if df[col].str.contains('\*+', na=False).any():
+                        # Replace asterisk placeholders with NaN for date columns
+                        df[col] = df[col].replace(r'\*+', pd.NaT, regex=True)
+                    
+                    # Try to convert to numeric if possible, otherwise keep as string
+                    try:
+                        pd.to_numeric(df[col], errors='raise')
+                        # If successful, convert to numeric
+                        df[col] = pd.to_numeric(df[col], errors='coerce')
+                    except (ValueError, TypeError):
+                        # Try to convert to datetime if it looks like a date column
+                        if any(date_keyword in col.upper() for date_keyword in ['DATE', 'DTC', 'DT']):
+                            try:
+                                df[col] = pd.to_datetime(df[col], errors='coerce')
+                            except (ValueError, TypeError):
+                                # Keep as string if datetime conversion fails
+                                df[col] = df[col].astype(str)
+                        else:
+                            # Keep as string, ensure it's string type
+                            df[col] = df[col].astype(str)
+            
             local_vars[var_name] = df
         
         try:
-            # Execute the code
-            exec(code, {'__builtins__': {}}, local_vars)
+            # Execute the code with minimal but necessary builtins
+            safe_builtins = {
+                '__import__': __import__,
+                'print': print,
+                'len': len,
+                'str': str,
+                'int': int,
+                'float': float,
+                'bool': bool,
+                'list': list,
+                'dict': dict,
+                'tuple': tuple,
+                'set': set,
+                'range': range,
+                'enumerate': enumerate,
+                'zip': zip,
+                'sum': sum,
+                'min': min,
+                'max': max,
+                'abs': abs,
+                'round': round,
+                'sorted': sorted,
+                'reversed': reversed,
+                'any': any,
+                'all': all,
+                'isinstance': isinstance,
+                'type': type,
+                'hasattr': hasattr,
+                'getattr': getattr,
+                'setattr': setattr,
+                'delattr': delattr,
+                'dir': dir,
+                'vars': vars,
+                'locals': locals,
+                'globals': globals,
+                'id': id,
+                'hash': hash,
+                'repr': repr,
+                'ascii': ascii,
+                'bin': bin,
+                'oct': oct,
+                'hex': hex,
+                'ord': ord,
+                'chr': chr,
+                'divmod': divmod,
+                'pow': pow,
+                'complex': complex,
+                'bytes': bytes,
+                'bytearray': bytearray,
+                'memoryview': memoryview,
+                'slice': slice,
+                'property': property,
+                'super': super,
+                'object': object,
+                'Exception': Exception,
+                'BaseException': BaseException,
+                'StopIteration': StopIteration,
+                'GeneratorExit': GeneratorExit,
+                'ArithmeticError': ArithmeticError,
+                'BufferError': BufferError,
+                'LookupError': LookupError,
+                'AssertionError': AssertionError,
+                'AttributeError': AttributeError,
+                'EOFError': EOFError,
+                'FloatingPointError': FloatingPointError,
+                'ImportError': ImportError,
+                'ModuleNotFoundError': ModuleNotFoundError,
+                'IndexError': IndexError,
+                'KeyError': KeyError,
+                'KeyboardInterrupt': KeyboardInterrupt,
+                'MemoryError': MemoryError,
+                'NameError': NameError,
+                'NotImplementedError': NotImplementedError,
+                'OSError': OSError,
+                'OverflowError': OverflowError,
+                'RecursionError': RecursionError,
+                'ReferenceError': ReferenceError,
+                'RuntimeError': RuntimeError,
+                'SyntaxError': SyntaxError,
+                'SystemError': SystemError,
+                'TypeError': TypeError,
+                'UnboundLocalError': UnboundLocalError,
+                'UnicodeError': UnicodeError,
+                'ValueError': ValueError,
+                'ZeroDivisionError': ZeroDivisionError,
+                'BlockingIOError': BlockingIOError,
+                'BrokenPipeError': BrokenPipeError,
+                'ChildProcessError': ChildProcessError,
+                'ConnectionError': ConnectionError,
+                'FileExistsError': FileExistsError,
+                'FileNotFoundError': FileNotFoundError,
+                'InterruptedError': InterruptedError,
+                'IsADirectoryError': IsADirectoryError,
+                'NotADirectoryError': NotADirectoryError,
+                'PermissionError': PermissionError,
+                'ProcessLookupError': ProcessLookupError,
+                'TimeoutError': TimeoutError,
+                'open': open,
+                'input': input,
+                'help': help,
+                'copyright': copyright,
+                'credits': credits,
+                'license': license,
+                'exit': exit,
+                'quit': quit
+            }
+            exec(code, {'__builtins__': safe_builtins}, local_vars)
             
             # Extract results
             result = local_vars.get('result')
@@ -184,17 +362,34 @@ Return ONLY the pandas code, no explanations. The code should be ready to execut
             
             # Convert results to serializable format
             if isinstance(result, pd.DataFrame):
+                # Convert datetime objects to strings for JSON serialization
+                df_copy = result.head(20).copy()
+                for col in df_copy.columns:
+                    if df_copy[col].dtype == 'datetime64[ns]':
+                        df_copy[col] = df_copy[col].dt.strftime('%Y-%m-%d')
+                    elif df_copy[col].dtype == 'object':
+                        # Handle any remaining datetime objects in object columns
+                        df_copy[col] = df_copy[col].astype(str)
+                
                 return {
                     'type': 'dataframe',
-                    'data': result.head(20).to_dict('records'),
+                    'data': df_copy.to_dict('records'),
                     'columns': result.columns.tolist(),
                     'total_rows': len(result),
                     'shape': result.shape
                 }
             elif isinstance(result, pd.Series):
+                # Convert datetime objects to strings for JSON serialization
+                series_copy = result.copy()
+                if series_copy.dtype == 'datetime64[ns]':
+                    series_copy = series_copy.dt.strftime('%Y-%m-%d')
+                elif series_copy.dtype == 'object':
+                    # Handle any remaining datetime objects in object series
+                    series_copy = series_copy.astype(str)
+                
                 return {
                     'type': 'series',
-                    'data': result.to_dict(),
+                    'data': series_copy.to_dict(),
                     'index': result.index.tolist(),
                     'dtype': str(result.dtype)
                 }
@@ -217,7 +412,30 @@ Return ONLY the pandas code, no explanations. The code should be ready to execut
                 }
                 
         except Exception as e:
-            raise Exception(f"Error executing pandas code: {str(e)}")
+            error_msg = str(e)
+            
+            # Provide more helpful error messages for common issues
+            if "can only concatenate str (not" in error_msg:
+                error_msg = f"Data type error: {error_msg}. This usually happens when trying to concatenate strings with numbers. Please check your query and ensure proper data type handling."
+            elif "KeyError" in error_msg:
+                error_msg = f"Column not found: {error_msg}. Please check the column names in your data."
+            elif "NameError" in error_msg:
+                error_msg = f"Variable not found: {error_msg}. Please check the dataframe variable names."
+            elif "['WEIGHT']" in error_msg or "['AGE']" in error_msg:
+                error_msg = f"Column selection error: {error_msg}. This happens when trying to use a list as a column name. Use df[['col1', 'col2']] to select multiple columns, not df[['col1']] = ['col1']."
+            elif "list" in error_msg and "str" in error_msg:
+                error_msg = f"List/string confusion: {error_msg}. Make sure you're using proper pandas syntax for column selection and operations."
+            elif "Can only use .str accessor with string values" in error_msg:
+                error_msg = f"String method error: {error_msg}. This happens when trying to use .str methods on datetime or numeric columns. Convert to string first with .astype(str) if needed."
+            elif "'AGE'" in error_msg:
+                error_msg = f"Column not found: {error_msg}. The AGE column is in the 'dm' (demographics) dataframe, not 'lb' (lab results). Use 'dm' for age-related queries."
+            
+            # Log the generated code for debugging
+            print(f"Generated code that failed:")
+            print(code)
+            print(f"Error: {error_msg}")
+            
+            raise Exception(f"Error executing pandas code: {error_msg}\n\nGenerated code:\n{code}\n\nOriginal OpenAI response:\n{code}")
     
     def _generate_report(self, query: str, result: Dict, pandas_code: str) -> str:
         """Generate natural language report from query results"""

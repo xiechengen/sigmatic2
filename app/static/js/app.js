@@ -3,11 +3,16 @@
 document.addEventListener('DOMContentLoaded', function() {
     // Initialize the application
     loadUploadedFiles();
+    updateSessionStatus();
     
     // Event listeners
     document.getElementById('uploadForm').addEventListener('submit', handleFileUpload);
     document.getElementById('clearSession').addEventListener('click', clearSession);
     document.getElementById('queryForm').addEventListener('submit', handleQuery);
+    document.getElementById('clearDashboard').addEventListener('click', clearDashboard);
+    
+    // Load dashboard on page load
+    loadDashboard();
     
     // File input change event
     document.getElementById('fileInput').addEventListener('change', function() {
@@ -89,6 +94,9 @@ async function loadUploadedFiles() {
                 </div>
             </div>
         `).join('');
+        
+        // Update session status after loading files
+        updateSessionStatus();
         
     } catch (error) {
         console.error('Error loading files:', error);
@@ -221,6 +229,7 @@ async function clearSession() {
         if (result.success) {
             showAlert(result.message, 'success');
             loadUploadedFiles();
+            updateSessionStatus();
             
             // Clear preview
             document.getElementById('dataPreview').innerHTML = `
@@ -274,50 +283,7 @@ function showLoading(show) {
     }
 }
 
-// Handle natural language query
-async function handleQuery(event) {
-    event.preventDefault();
-    
-    const queryInput = document.getElementById('queryInput');
-    const query = queryInput.value.trim();
-    
-    if (!query) {
-        return;
-    }
-    
-    // Add user message to chat
-    addChatMessage('user', query);
-    queryInput.value = '';
-    
-    // Add loading message
-    const loadingId = addChatMessage('assistant', 'Analyzing your query<span class="loading-dots"></span>', true);
-    
-    try {
-        const response = await fetch('/query', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ query: query })
-        });
-        
-        const result = await response.json();
-        
-        // Remove loading message
-        removeChatMessage(loadingId);
-        
-        if (result.success) {
-            // Add assistant response
-            addQueryResponse(result);
-        } else {
-            addChatMessage('assistant', `❌ Error: ${result.error}`);
-        }
-    } catch (error) {
-        console.error('Query error:', error);
-        removeChatMessage(loadingId);
-        addChatMessage('assistant', '❌ An error occurred while processing your query. Please try again.');
-    }
-}
+
 
 // Add chat message
 function addChatMessage(type, content, isTemporary = false) {
@@ -338,7 +304,7 @@ function addChatMessage(type, content, isTemporary = false) {
     return messageId;
 }
 
-// Remove chat message (for loading states)
+// Remove chat message by ID
 function removeChatMessage(messageId) {
     const message = document.getElementById(messageId);
     if (message) {
@@ -475,9 +441,334 @@ function createSeriesDisplay(data) {
     return html;
 }
 
+// Update session status indicator
+function updateSessionStatus() {
+    const sessionStatus = document.getElementById('sessionStatus');
+    const filesList = document.querySelector('#filesList');
+    
+    if (filesList && filesList.children.length > 0) {
+        const fileCount = filesList.children.length;
+        sessionStatus.innerHTML = `
+            <i class="fas fa-check-circle me-1 text-success"></i>
+            ${fileCount} file${fileCount > 1 ? 's' : ''} loaded - Ready to query
+        `;
+        sessionStatus.className = 'text-success';
+    } else {
+        sessionStatus.innerHTML = `
+            <i class="fas fa-info-circle me-1"></i>
+            Upload CSV files to start querying
+        `;
+        sessionStatus.className = 'text-muted';
+    }
+}
+
 // Escape HTML to prevent XSS
 function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
+}
+
+// Dashboard functions
+async function clearDashboard() {
+    if (confirm('Are you sure you want to clear all charts from the dashboard?')) {
+        const dashboardCharts = document.getElementById('dashboardCharts');
+        dashboardCharts.innerHTML = `
+            <div class="text-center text-muted py-4">
+                <i class="fas fa-chart-bar fa-3x mb-3"></i>
+                <p>No charts pinned to dashboard yet.</p>
+                <p>Create visualizations and pin them here for easy access!</p>
+            </div>
+        `;
+    }
+}
+
+async function loadDashboard() {
+    try {
+        const response = await fetch('/dashboard');
+        const result = await response.json();
+        
+        if (result.success && result.charts.length > 0) {
+            displayDashboardCharts(result.charts);
+        }
+    } catch (error) {
+        console.error('Error loading dashboard:', error);
+    }
+}
+
+function displayDashboardCharts(charts) {
+    const dashboardCharts = document.getElementById('dashboardCharts');
+    
+    if (charts.length === 0) {
+        dashboardCharts.innerHTML = `
+            <div class="text-center text-muted py-4">
+                <i class="fas fa-chart-bar fa-3x mb-3"></i>
+                <p>No charts pinned to dashboard yet.</p>
+                <p>Create visualizations and pin them here for easy access!</p>
+            </div>
+        `;
+        return;
+    }
+    
+    dashboardCharts.innerHTML = charts.map(chart => createChartHTML(chart)).join('');
+    
+    // Render charts
+    charts.forEach(chart => {
+        if (chart.chart && chart.chart.data) {
+            const chartDiv = document.getElementById(`chart-${chart.id}`);
+            if (chartDiv) {
+                Plotly.newPlot(chartDiv, chart.chart.data.data, chart.chart.layout);
+            }
+        }
+    });
+}
+
+function createChartHTML(chart) {
+    return `
+        <div class="chart-container">
+            <div class="chart-header">
+                <h6 class="chart-title">${escapeHtml(chart.title)}</h6>
+                <div class="chart-actions">
+                    <span class="chart-type-badge">${chart.chart.type || 'chart'}</span>
+                    <button class="btn btn-outline-danger btn-sm" onclick="removeChartFromDashboard('${chart.id}')">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="chart-content">
+                <div id="chart-${chart.id}"></div>
+            </div>
+        </div>
+    `;
+}
+
+async function removeChartFromDashboard(chartId) {
+    try {
+        const response = await fetch(`/dashboard/remove/${chartId}`, {
+            method: 'DELETE'
+        });
+        const result = await response.json();
+        
+        if (result.success) {
+            loadDashboard(); // Reload dashboard
+        }
+    } catch (error) {
+        console.error('Error removing chart:', error);
+    }
+}
+
+async function pinChartToDashboard(chartData, title) {
+    try {
+        const response = await fetch('/dashboard/pin', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                chart: chartData,
+                title: title
+            })
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            // Update the pin button to show it's pinned
+            const pinBtn = document.querySelector('.pin-chart-btn[data-chart-id]');
+            if (pinBtn) {
+                pinBtn.classList.add('pinned');
+                pinBtn.innerHTML = '<i class="fas fa-thumbtack"></i> Pinned';
+                pinBtn.disabled = true;
+            }
+            
+            // Reload dashboard
+            loadDashboard();
+        }
+    } catch (error) {
+        console.error('Error pinning chart:', error);
+    }
+}
+
+// Enhanced query handler to detect visualization requests
+async function handleQuery(event) {
+    event.preventDefault();
+
+    const queryInput = document.getElementById('queryInput');
+    const query = queryInput.value.trim();
+
+    if (!query) {
+        return;
+    }
+
+    // Check if there are uploaded files
+    const filesList = document.querySelector('#filesList');
+    if (!filesList || filesList.children.length === 0) {
+        addChatMessage('assistant', '❌ No data uploaded. Please upload CSV files first before asking questions.\n\n💡 Tip: Make sure you see the green "1 file loaded" indicator above before querying.');
+        return;
+    }
+
+    // Add user message to chat
+    addChatMessage('user', query);
+    queryInput.value = '';
+
+    // Add loading message
+    const loadingId = addChatMessage('assistant', 'Analyzing your query<span class="loading-dots"></span>', true);
+
+    try {
+        // Check if this is a visualization request
+        const isVisualization = isVisualizationQuery(query);
+        
+        let response;
+        if (isVisualization) {
+            response = await fetch('/visualize', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ query: query })
+            });
+        } else {
+            response = await fetch('/query', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ query: query })
+            });
+        }
+
+        const result = await response.json();
+
+        // Remove loading message
+        removeChatMessage(loadingId);
+
+        if (result.success) {
+            if (isVisualization) {
+                addVisualizationResponse(result);
+            } else {
+                addQueryResponse(result);
+            }
+        } else {
+            // Provide more helpful error messages
+            let errorMessage = result.error;
+            if (result.error.includes('No data uploaded')) {
+                errorMessage = '❌ No data uploaded. Please upload CSV files first before asking questions.\n\n💡 Tip: Make sure you see the green "1 file loaded" indicator above before querying.';
+            } else if (result.error.includes('Error executing pandas code')) {
+                // Extract the generated code from the error message for debugging
+                const errorParts = result.error.split('\n\nGenerated code:\n');
+                if (errorParts.length > 1) {
+                    const generatedCode = errorParts[1].split('\n\nOriginal OpenAI response:')[0];
+                    errorMessage = `❌ Query processing error: ${errorParts[0].replace('Error executing pandas code: ', '')}\n\n🔍 Generated code:\n\`\`\`python\n${generatedCode}\n\`\`\``;
+                } else {
+                    errorMessage = `❌ Query processing error: ${result.error.replace('Error executing pandas code: ', '')}`;
+                }
+            } else {
+                errorMessage = `❌ Error: ${result.error}`;
+            }
+            addChatMessage('assistant', errorMessage);
+        }
+    } catch (error) {
+        console.error('Query error:', error);
+        removeChatMessage(loadingId);
+        addChatMessage('assistant', '❌ An error occurred while processing your query. Please try again.');
+    }
+}
+
+function isVisualizationQuery(query) {
+    const visualizationKeywords = [
+        'plot', 'chart', 'graph', 'visualize', 'scatter', 'line', 'bar', 'histogram',
+        'box', 'pie', 'heatmap', 'correlation', 'trend', 'distribution'
+    ];
+    
+    const queryLower = query.toLowerCase();
+    return visualizationKeywords.some(keyword => queryLower.includes(keyword));
+}
+
+function addVisualizationResponse(result) {
+    const chatMessages = document.getElementById('chatMessages');
+    const responseDiv = document.createElement('div');
+    responseDiv.className = 'chat-message assistant';
+
+    let content = '';
+
+    // Add chart type and title
+    const chartType = result.chart_type || 'chart';
+    const chartTitle = result.chart.layout?.title?.text || 'Visualization';
+    
+    content += `
+        <div class="visualization-result">
+            <div class="visualization-header">
+                <div>
+                    <h6 class="visualization-title">
+                        <i class="fas fa-chart-bar me-2"></i>${escapeHtml(chartTitle)}
+                    </h6>
+                    <span class="chart-type-badge">${chartType}</span>
+                </div>
+                <div class="visualization-actions">
+                    <button class="btn btn-sm pin-chart-btn" onclick="pinChartToDashboard(${JSON.stringify(result.chart)}, '${escapeHtml(chartTitle)}')">
+                        <i class="fas fa-thumbtack"></i> Pin to Dashboard
+                    </button>
+                </div>
+            </div>
+            <div class="chart-content">
+                <div id="temp-chart-${Date.now()}"></div>
+            </div>
+    `;
+
+    // Add data summary if available
+    if (result.data_summary) {
+        content += createDataSummaryHTML(result.data_summary);
+    }
+
+    content += '</div>';
+
+    responseDiv.innerHTML = `<div class="message-content">${content}</div>`;
+    chatMessages.appendChild(responseDiv);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+
+    // Render the chart
+    const chartDiv = document.getElementById(`temp-chart-${Date.now()}`);
+    if (chartDiv && result.chart && result.chart.data) {
+        Plotly.newPlot(chartDiv, result.chart.data.data, result.chart.layout);
+    }
+}
+
+function createDataSummaryHTML(summary) {
+    let html = '<div class="chart-summary"><h6>Data Summary</h6>';
+    
+    html += `<div class="summary-item">
+        <span class="summary-label">Total Records:</span>
+        <span class="summary-value">${summary.total_records}</span>
+    </div>`;
+    
+    if (summary.x_column) {
+        html += `<div class="summary-item">
+            <span class="summary-label">X-Axis (${summary.x_column.name}):</span>
+            <span class="summary-value">${summary.x_column.type} - ${summary.x_column.unique_values} unique values</span>
+        </div>`;
+        
+        if (summary.x_column.mean !== undefined) {
+            html += `<div class="summary-item">
+                <span class="summary-label">Mean:</span>
+                <span class="summary-value">${summary.x_column.mean.toFixed(2)}</span>
+            </div>`;
+        }
+    }
+    
+    if (summary.y_column) {
+        html += `<div class="summary-item">
+            <span class="summary-label">Y-Axis (${summary.y_column.name}):</span>
+            <span class="summary-value">${summary.y_column.type} - ${summary.y_column.unique_values} unique values</span>
+        </div>`;
+        
+        if (summary.y_column.mean !== undefined) {
+            html += `<div class="summary-item">
+                <span class="summary-label">Mean:</span>
+                <span class="summary-value">${summary.y_column.mean.toFixed(2)}</span>
+            </div>`;
+        }
+    }
+    
+    html += '</div>';
+    return html;
 } 
