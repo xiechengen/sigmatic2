@@ -4,6 +4,8 @@ from typing import Dict, List, Any, Optional
 from flask import current_app
 import pandasai as pai
 from pandasai_litellm.litellm import LiteLLM
+import matplotlib
+matplotlib.use('Agg')  # Use non-interactive backend to avoid GUI issues
 
 class QueryProcessor:
     def __init__(self):
@@ -130,7 +132,7 @@ class QueryProcessor:
                 # Process the query
                 response = df.chat(query)
                 print(f"Fallback response type: {type(response)}")
-                print(response)
+                print("Debugging response: ", response.value)
                 
                 return self._convert_pandasai_response(response)
                 
@@ -211,6 +213,58 @@ class QueryProcessor:
                     'type': 'scalar',
                     'value': response.value
                 }
+            elif response.type == "chart":
+                # Handle PandasAI chart response
+                print("Processing PandasAI chart response")
+                chart_value = response.value
+                
+                # Check if PandasAI generated a PNG file
+                import os
+                import glob
+                
+                # Look for the most recent PNG file in exports/charts/
+                chart_dir = "exports/charts"
+                if os.path.exists(chart_dir):
+                    png_files = glob.glob(os.path.join(chart_dir, "*.png"))
+                    if png_files:
+                        # Get the most recent PNG file
+                        latest_png = max(png_files, key=os.path.getctime)
+                        print(f"Found chart PNG: {latest_png}")
+                        
+                        # Return just the filename for the PNG file
+                        filename = os.path.basename(latest_png)
+                        print(f"Returning PNG chart filename: {filename}")
+                        return {
+                            'type': 'chart',
+                            'chart': {
+                                'image_path': filename,
+                                'chart_type': 'png'
+                            },
+                            'chart_type': 'png'
+                        }
+                
+                # Fallback: try to handle as Plotly figure
+                if hasattr(chart_value, 'to_json'):
+                    # It's a Plotly figure
+                    chart_json = json.loads(chart_value.to_json())
+                    return {
+                        'type': 'chart',
+                        'chart': {
+                            'data': chart_json,
+                            'chart_type': 'plotly'
+                        },
+                        'chart_type': 'plotly'
+                    }
+                else:
+                    # Fallback for other chart types
+                    return {
+                        'type': 'chart',
+                        'chart': {
+                            'data': str(chart_value),
+                            'chart_type': 'unknown'
+                        },
+                        'chart_type': 'unknown'
+                    }
             else:
                 return {
                     'type': 'other',
@@ -293,6 +347,10 @@ class QueryProcessor:
             data = result.get('data', {})
             count = len(data)
             return f"Analysis completed. Generated {count} key-value pairs."
+        
+        elif result['type'] == 'chart':
+            chart_type = result.get('chart_type', 'chart')
+            return f"Chart generated successfully. The {chart_type} visualization is ready for review."
         
         elif result['type'] == 'error':
             return f"Analysis failed: {result.get('data', 'Unknown error')}"

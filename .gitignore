@@ -132,6 +132,9 @@ dmypy.json
 app/static/uploads/*
 !app/static/uploads/.gitkeep
 
+# PandasAI generated charts
+exports/charts/
+
 # IDE
 .vscode/
 .idea/

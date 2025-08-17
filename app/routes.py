@@ -168,6 +168,20 @@ def pin_chart_to_dashboard():
         'chart_id': chart_info['id']
     })
 
+@main.route('/chart-image/<path:filename>')
+def serve_chart_image(filename):
+    """Serve chart images from the exports/charts directory"""
+    from flask import send_from_directory
+    import os
+    # Use absolute path to the exports/charts directory
+    chart_dir = os.path.join(os.getcwd(), 'exports', 'charts')
+    print(f"Serving chart image: {filename}")
+    print(f"Chart directory: {chart_dir}")
+    print(f"Directory exists: {os.path.exists(chart_dir)}")
+    if os.path.exists(chart_dir):
+        print(f"Files in directory: {os.listdir(chart_dir)}")
+    return send_from_directory(chart_dir, filename)
+
 @main.route('/dashboard/remove/<chart_id>', methods=['DELETE'])
 def remove_chart_from_dashboard(chart_id):
     """Remove a chart from the dashboard"""
@@ -176,7 +190,7 @@ def remove_chart_from_dashboard(chart_id):
     
     # Remove chart by ID
     session['dashboard_charts'] = [
-        chart for chart in session['dashboard_charts'] 
+        chart for chart in session['dashboard_charts']
         if chart['id'] != chart_id
     ]
     

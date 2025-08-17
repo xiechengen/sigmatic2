@@ -615,27 +615,14 @@ async function handleQuery(event) {
     const loadingId = addChatMessage('assistant', 'Analyzing your query<span class="loading-dots"></span>', true);
 
     try {
-        // Check if this is a visualization request
-        const isVisualization = isVisualizationQuery(query);
-        
-        let response;
-        if (isVisualization) {
-            response = await fetch('/visualize', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ query: query })
-            });
-        } else {
-            response = await fetch('/query', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ query: query })
-            });
-        }
+        // Use unified query endpoint for all requests
+        const response = await fetch('/query', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ query: query })
+        });
 
         const result = await response.json();
 
@@ -643,8 +630,10 @@ async function handleQuery(event) {
         removeChatMessage(loadingId);
 
         if (result.success) {
-            if (isVisualization) {
-                addVisualizationResponse(result);
+            // Check if the result is a chart response
+            if (result.result && result.result.type === 'chart') {
+                console.log('Chart response:', result);
+                addChartResponse(result);
             } else {
                 addQueryResponse(result);
             }
@@ -674,17 +663,9 @@ async function handleQuery(event) {
     }
 }
 
-function isVisualizationQuery(query) {
-    const visualizationKeywords = [
-        'plot', 'chart', 'graph', 'visualize', 'scatter', 'line', 'bar', 'histogram',
-        'box', 'pie', 'heatmap', 'correlation', 'trend', 'distribution'
-    ];
-    
-    const queryLower = query.toLowerCase();
-    return visualizationKeywords.some(keyword => queryLower.includes(keyword));
-}
 
-function addVisualizationResponse(result) {
+
+function addChartResponse(result) {
     const chatMessages = document.getElementById('chatMessages');
     const responseDiv = document.createElement('div');
     responseDiv.className = 'chat-message assistant';
@@ -695,8 +676,15 @@ function addVisualizationResponse(result) {
     let content = '';
 
     // Add chart type and title
-    const chartType = result.chart_type || 'chart';
-    const chartTitle = result.chart.layout?.title?.text || 'Visualization';
+    const chartType = result.result.chart_type || 'chart';
+    let chartTitle = 'PandasAI Visualization';
+    
+    // Try to get title from different chart formats
+    if (result.result.chart.chart_type === 'png') {
+        chartTitle = 'Chart Visualization';
+    } else if (result.result.chart.data && result.result.chart.data.layout && result.result.chart.data.layout.title) {
+        chartTitle = result.result.chart.data.layout.title.text || 'PandasAI Visualization';
+    }
     
     content += `
         <div class="visualization-result">
@@ -708,7 +696,7 @@ function addVisualizationResponse(result) {
                     <span class="chart-type-badge">${chartType}</span>
                 </div>
                 <div class="visualization-actions">
-                    <button class="btn btn-sm pin-chart-btn" onclick="pinChartToDashboard(${JSON.stringify(result.chart)}, '${escapeHtml(chartTitle)}')">
+                    <button class="btn btn-sm pin-chart-btn" onclick="pinChartToDashboard(${JSON.stringify(result.result.chart)}, '${escapeHtml(chartTitle)}')">
                         <i class="fas fa-thumbtack"></i> Pin to Dashboard
                     </button>
                 </div>
@@ -718,11 +706,6 @@ function addVisualizationResponse(result) {
             </div>
     `;
 
-    // Add data summary if available
-    if (result.data_summary) {
-        content += createDataSummaryHTML(result.data_summary);
-    }
-
     content += '</div>';
 
     responseDiv.innerHTML = `<div class="message-content">${content}</div>`;
@@ -731,10 +714,25 @@ function addVisualizationResponse(result) {
 
     // Render the chart
     const chartDiv = document.getElementById(chartId);
-    if (chartDiv && result.chart && result.chart.data) {
-        // The chart.data is already the full Plotly figure JSON
-        const plotlyData = result.chart.data;
-        Plotly.newPlot(chartDiv, plotlyData.data, plotlyData.layout);
+    console.log('Chart div found:', chartDiv);
+    console.log('Chart data:', result.result.chart);
+    
+    if (chartDiv && result.result.chart) {
+        if (result.result.chart.chart_type === 'png' && result.result.chart.image_path) {
+            // Display PNG image
+            const filename = result.result.chart.image_path;
+            console.log('Displaying PNG chart:', filename);
+            chartDiv.innerHTML = `<img src="/chart-image/${filename}" alt="Chart" style="max-width: 100%; height: auto;" />`;
+        } else if (result.result.chart.data) {
+            // Display Plotly chart
+            console.log('Displaying Plotly chart');
+            const plotlyData = result.result.chart.data;
+            Plotly.newPlot(chartDiv, plotlyData.data, plotlyData.layout);
+        } else {
+            console.log('No chart data found');
+        }
+    } else {
+        console.log('Chart div or chart data not found');
     }
 }
 

@@ -10,6 +10,8 @@ from plotly.subplots import make_subplots
 import json
 from typing import Dict, Any, List, Optional
 import numpy as np
+import matplotlib
+matplotlib.use('Agg')  # Use non-interactive backend to avoid GUI issues
 
 class VisualizationProcessor:
     """Handles data visualization and chart generation"""
@@ -100,15 +102,42 @@ class VisualizationProcessor:
         # Simple extraction based on common patterns
         query_lower = query.lower()
         
-        # Look for column names in the query
+        # Look for column names in the query with better matching
         columns = df.columns.tolist()
         found_columns = []
         
+        # Common column name mappings
+        column_mappings = {
+            'age': ['age', 'AGE', 'Age', 'subject_age', 'patient_age'],
+            'weight': ['weight', 'WEIGHT', 'Weight', 'subject_weight', 'patient_weight', 'wt'],
+            'height': ['height', 'HEIGHT', 'Height', 'subject_height', 'patient_height', 'ht'],
+            'bmi': ['bmi', 'BMI', 'Bmi', 'body_mass_index'],
+            'visit': ['visit', 'VISIT', 'Visit', 'visit_num', 'visit_number'],
+            'date': ['date', 'DATE', 'Date', 'visit_date', 'screening_date'],
+            'id': ['id', 'ID', 'Id', 'subject_id', 'patient_id', 'usubjid', 'studyid']
+        }
+        
+        # First, try to find columns mentioned in the query
         for col in columns:
             if col.lower() in query_lower:
                 found_columns.append(col)
         
-        # If no specific columns found, use first two numeric columns
+        # If not enough columns found, try mapping common terms
+        if len(found_columns) < 2:
+            for term, possible_names in column_mappings.items():
+                if term in query_lower:
+                    for possible_name in possible_names:
+                        if possible_name in columns:
+                            if possible_name not in found_columns:
+                                found_columns.append(possible_name)
+                                break
+                    # Also try partial matches
+                    for col in columns:
+                        if term in col.lower() and col not in found_columns:
+                            found_columns.append(col)
+                            break
+        
+        # If still not enough columns found, use first two numeric columns
         if len(found_columns) < 2:
             numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
             if len(numeric_cols) >= 2:
@@ -118,6 +147,20 @@ class VisualizationProcessor:
         
         if len(found_columns) < 2:
             return None
+        
+        print(f"Found columns for visualization: {found_columns}")
+        print(f"DataFrame columns: {columns}")
+        print(f"DataFrame shape: {df.shape}")
+        
+        # Debug: Show all numeric columns
+        numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
+        print(f"All numeric columns: {numeric_cols}")
+        
+        # Debug: Show columns that might contain age/weight
+        age_like_cols = [col for col in columns if 'age' in col.lower()]
+        weight_like_cols = [col for col in columns if 'weight' in col.lower() or 'wt' in col.lower()]
+        print(f"Age-like columns: {age_like_cols}")
+        print(f"Weight-like columns: {weight_like_cols}")
         
         return {
             'dataframe': df,
@@ -132,8 +175,36 @@ class VisualizationProcessor:
         x_col = chart_data['x_column']
         y_col = chart_data['y_column']
         
+        print(f"Creating scatter plot with columns: {x_col} vs {y_col}")
+        print(f"DataFrame shape: {df.shape}")
+        print(f"X column data type: {df[x_col].dtype}")
+        print(f"Y column data type: {df[y_col].dtype}")
+        print(f"X column sample values: {df[x_col].head().tolist()}")
+        print(f"Y column sample values: {df[y_col].head().tolist()}")
+        
+        # Check for missing or invalid data
+        x_missing = df[x_col].isna().sum()
+        y_missing = df[y_col].isna().sum()
+        print(f"Missing values in X: {x_missing}, Y: {y_missing}")
+        
+        # Remove rows with missing values for plotting
+        df_clean = df.dropna(subset=[x_col, y_col])
+        print(f"DataFrame shape after removing missing values: {df_clean.shape}")
+        
+        if len(df_clean) == 0:
+            print("No valid data points for plotting!")
+            return {
+                'type': 'scatter',
+                'data': {'data': [], 'layout': {}},
+                'layout': {
+                    'title': f"Scatter Plot: {x_col} vs {y_col} (No valid data)",
+                    'xaxis_title': x_col,
+                    'yaxis_title': y_col
+                }
+            }
+        
         fig = px.scatter(
-            df, 
+            df_clean, 
             x=x_col, 
             y=y_col,
             title=f"Scatter Plot: {x_col} vs {y_col}",
