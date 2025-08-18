@@ -97,8 +97,9 @@ class QueryProcessor:
             df = pai.read_csv(file_path)
             print("Successfully loaded CSV with PandasAI")
             
+            preprompt = "You are an expert in clinical trial data analysis. Given this input,  "
             # Process the query using chat
-            response = df.chat(query)
+            response = df.chat(preprompt + query)
             print(f"PandasAI response type: {type(response)}")
             
             # Convert response to serializable format
